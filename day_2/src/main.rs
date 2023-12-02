@@ -9,6 +9,9 @@ struct CubeStats {
 }
 
 impl CubeStats {
+    fn power(&self) -> usize {
+        self.red * self.green * self.blue
+    }
     fn parse_stats_line(line: &str) -> Self {
         // 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
         let mut red = 0;
@@ -63,6 +66,13 @@ fn sum_valid_ids(text: &str, valid_stats: &CubeStats) -> usize {
         .sum()
 }
 
+fn sum_powers(text: &str) -> usize {
+    text.lines()
+        .map(Game::parse_game_line)
+        .map(|g| g.cube_stats.power())
+        .sum()
+}
+
 fn main() {
     println!(
         "{}",
@@ -75,6 +85,7 @@ fn main() {
             }
         )
     );
+    println!("{}", sum_powers(&fs::read_to_string("input.txt").unwrap()));
 }
 
 #[cfg(test)]
@@ -146,6 +157,14 @@ mod tests {
                 }
             ),
             8
+        )
+    }
+
+    #[test]
+    fn test_sum_powers() {
+        assert_eq!(
+            sum_powers(&fs::read_to_string("example.txt").unwrap()),
+            2286
         )
     }
 }
