@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fs};
+use std::{
+    collections::{HashSet, VecDeque},
+    fs,
+};
 
 struct Card {
     winning_numbers: HashSet<u32>,
@@ -41,6 +44,26 @@ impl Card {
     }
 }
 
+fn compute_card_count(cards: &[Card]) -> usize {
+    let mut cards_to_process: VecDeque<usize> = (0..cards.len()).collect();
+    let mut cards_processed = 0;
+    loop {
+        if let Some(card_index) = cards_to_process.pop_front() {
+            let overlaps = cards[card_index].number_overlap_count();
+            cards_to_process.extend((card_index + 1)..=(card_index + overlaps));
+            cards_processed += 1;
+        } else {
+            break;
+        }
+    }
+
+    cards_processed
+}
+
+fn compute_card_count_from_input(s: &str) -> usize {
+    compute_card_count(&s.lines().map(Card::parse).collect::<Vec<_>>())
+}
+
 fn compute_winnings(s: &str) -> usize {
     s.lines().map(Card::parse).map(|c| c.value()).sum()
 }
@@ -49,6 +72,10 @@ fn main() {
     println!(
         "{}",
         compute_winnings(&fs::read_to_string("input.txt").unwrap())
+    );
+    println!(
+        "{}",
+        compute_card_count_from_input(&fs::read_to_string("input.txt").unwrap())
     );
 }
 
@@ -91,6 +118,14 @@ mod tests {
         assert_eq!(
             compute_winnings(&fs::read_to_string("example.txt").unwrap()),
             13
+        )
+    }
+
+    #[test]
+    fn test_compute_card_count() {
+        assert_eq!(
+            compute_card_count_from_input(&fs::read_to_string("example.txt").unwrap()),
+            30
         )
     }
 }
