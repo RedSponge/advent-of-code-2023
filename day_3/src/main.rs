@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fs, ops};
+use std::{
+    collections::{HashMap, HashSet},
+    fs, ops,
+};
 
 use regex::Regex;
 
@@ -26,6 +29,8 @@ impl ops::Add<Position> for Position {
 struct Schematic {
     symbols: HashMap<Position, char>,
     numbers: HashMap<Position, u32>,
+    // Mapping between digit position to number start
+    digits: HashMap<Position, Position>,
 }
 
 fn num_length(mut n: u32) -> usize {
@@ -49,13 +54,11 @@ impl Schematic {
         s.lines()
             .enumerate()
             .flat_map(|(y, line)| {
-                re.find_iter(line)
-                    .map(|mtch| {
-                        let x = mtch.start();
-                        let value = proc_function(mtch.as_str());
-                        (Position(x as i32, y as i32), value)
-                    })
-                    .collect::<Vec<_>>()
+                re.find_iter(line).map(move |mtch| {
+                    let x = mtch.start();
+                    let value = proc_function(mtch.as_str());
+                    (Position(x as i32, y as i32), value)
+                })
             })
             .collect()
     }
@@ -74,7 +77,18 @@ impl Schematic {
                 .expect("Regex should've caught single characters!")
         });
 
-        Schematic { numbers, symbols }
+        let digits = numbers
+            .iter()
+            .flat_map(|(&start_pos, &val)| {
+                (0..num_length(val)).map(move |dx| (start_pos + Position(dx as i32, 0), start_pos))
+            })
+            .collect();
+
+        Schematic {
+            numbers,
+            symbols,
+            digits,
+        }
     }
     fn is_symbol(&self, pos: Position) -> bool {
         self.symbols.contains_key(&pos)
@@ -107,11 +121,49 @@ impl Schematic {
             .map(|(&_pos, &val)| val)
             .sum()
     }
+
+    fn get_numbers_around_point(&self, pos: Position) -> Vec<u32> {
+        let mut num_positions = HashSet::new();
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+
+                let p = pos + Position(dx, dy);
+
+                if let Some(&num_position) = self.digits.get(&p) {
+                    num_positions.insert(num_position);
+                }
+            }
+        }
+        num_positions
+            .iter()
+            .map(|n_pos| {
+                *self
+                    .numbers
+                    .get(n_pos)
+                    .expect("Digit dict didn't match numbers")
+            })
+            .collect()
+    }
+}
+
+fn compute_gear_factors(schematic: &Schematic) -> u32 {
+    schematic
+        .symbols
+        .iter()
+        .filter(|(_pos, &symbol)| symbol == '*')
+        .map(|(&pos, _symbol)| schematic.get_numbers_around_point(pos))
+        .filter(|v| v.len() == 2)
+        .map(|v| v.iter().product::<u32>())
+        .sum()
 }
 
 fn main() {
     let schematic = Schematic::parse(&fs::read_to_string("input.txt").unwrap());
     println!("{}", schematic.sum_numbers_next_to_symbols());
+    println!("{}", compute_gear_factors(&schematic));
 }
 
 #[cfg(test)]
@@ -152,7 +204,43 @@ mod tests {
             ]
             .into_iter()
             .collect()
-        )
+        );
+
+        assert_eq!(
+            schematic.digits,
+            [
+                (Position(0, 0), Position(0, 0)),
+                (Position(1, 0), Position(0, 0)),
+                (Position(2, 0), Position(0, 0)),
+                (Position(5, 0), Position(5, 0)),
+                (Position(6, 0), Position(5, 0)),
+                (Position(7, 0), Position(5, 0)),
+                (Position(2, 2), Position(2, 2)),
+                (Position(3, 2), Position(2, 2)),
+                (Position(6, 2), Position(6, 2)),
+                (Position(7, 2), Position(6, 2)),
+                (Position(8, 2), Position(6, 2)),
+                (Position(0, 4), Position(0, 4)),
+                (Position(1, 4), Position(0, 4)),
+                (Position(2, 4), Position(0, 4)),
+                (Position(7, 5), Position(7, 5)),
+                (Position(8, 5), Position(7, 5)),
+                (Position(2, 6), Position(2, 6)),
+                (Position(3, 6), Position(2, 6)),
+                (Position(4, 6), Position(2, 6)),
+                (Position(6, 7), Position(6, 7)),
+                (Position(7, 7), Position(6, 7)),
+                (Position(8, 7), Position(6, 7)),
+                (Position(1, 9), Position(1, 9)),
+                (Position(2, 9), Position(1, 9)),
+                (Position(3, 9), Position(1, 9)),
+                (Position(5, 9), Position(5, 9)),
+                (Position(6, 9), Position(5, 9)),
+                (Position(7, 9), Position(5, 9)),
+            ]
+            .into_iter()
+            .collect()
+        );
     }
 
     #[test]
@@ -160,6 +248,7 @@ mod tests {
         let schematic = Schematic {
             numbers: HashMap::new(),
             symbols: [(Position(0, 0), '!')].into_iter().collect(),
+            digits: HashMap::new(),
         };
         assert!(!schematic.is_next_to_symbol(Position(0, 0)));
         assert!(schematic.is_next_to_symbol(Position(0, 1)));
@@ -181,5 +270,20 @@ mod tests {
     fn test_sum_nums_next_to_symbols() {
         let schematic = Schematic::parse(&fs::read_to_string("example.txt").unwrap());
         assert_eq!(schematic.sum_numbers_next_to_symbols(), 4361);
+    }
+
+    #[test]
+    fn test_sum_around_point() {
+        let schematic = Schematic::parse(&fs::read_to_string("example.txt").unwrap());
+        assert_eq!(
+            schematic.get_numbers_around_point(Position(3, 1)),
+            vec![467, 35]
+        );
+    }
+
+    #[test]
+    fn test_compute_gear_factors() {
+        let schematic = Schematic::parse(&fs::read_to_string("example.txt").unwrap());
+        assert_eq!(compute_gear_factors(&schematic), 467835);
     }
 }
