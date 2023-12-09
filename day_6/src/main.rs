@@ -41,7 +41,8 @@ fn main() {
             Game(90.0, 1112.0),
             Game(83.0, 1360.0)
         ])
-    )
+    );
+    println!("{}", count_possible_wins(48989083.0, 390110311121360.0));
 }
 
 #[cfg(test)]
@@ -53,6 +54,7 @@ mod tests {
         assert_eq!(count_possible_wins(7.0, 9.0), 4);
         assert_eq!(count_possible_wins(15.0, 40.0), 8);
         assert_eq!(count_possible_wins(30.0, 200.0), 9);
+        assert_eq!(count_possible_wins(71530.0, 940200.0), 71503);
     }
 
     #[test]
