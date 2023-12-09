@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fs};
+use rayon::prelude::*;
+use std::{collections::HashMap, fs, ops::Range};
 
 #[derive(PartialEq, Eq, Debug)]
 struct RangeTransformation {
@@ -81,16 +82,19 @@ impl Almanac {
     }
 }
 
-fn parse_almanac(s: &str) -> (Almanac, Vec<usize>) {
+fn parse_almanac(s: &str) -> (Almanac, Vec<Range<usize>>) {
     let mut almanac = Almanac::new();
     let mut seeds = vec![];
     // \r\n\r\n is an ugly hack and I should probably just split iterate over lines.
     for section in s.split("\r\n\r\n") {
         if section.starts_with("seeds: ") {
-            seeds = section["seeds: ".len()..]
+            let mut seed_parts = section["seeds: ".len()..]
                 .split_whitespace()
-                .map(|s| s.parse().unwrap())
-                .collect()
+                .map(|s| s.parse().unwrap());
+            while let Some(range_start) = seed_parts.next() {
+                let range_size = seed_parts.next().expect("Seeds must come in pairs!");
+                seeds.push(range_start..(range_start + range_size));
+            }
         } else {
             let mut lines = section.lines();
             let header = lines.next().unwrap();
@@ -124,8 +128,13 @@ fn compute_seed_location(almanac: &Almanac, seed: usize) -> usize {
 fn find_lowest_seed_from_input(s: &str) -> usize {
     let (almanac, seeds) = parse_almanac(s);
     seeds
-        .iter()
-        .map(|&seed| compute_seed_location(&almanac, seed))
+        .into_iter()
+        .map(|r| {
+            r.into_par_iter()
+                .map(|seed| compute_seed_location(&almanac, seed))
+                .min()
+                .expect("No Seeds :(")
+        })
         .min()
         .expect("No seeds :(")
 }
@@ -166,7 +175,7 @@ mod tests {
     #[test]
     fn test_parse_almanac() {
         let (almanac, seeds) = parse_almanac(&fs::read_to_string("example.txt").unwrap());
-        assert_eq!(seeds, vec![79, 14, 55, 13]);
+        assert_eq!(seeds, vec![79..(79 + 14), 55..(55 + 13)]);
         assert_eq!(
             almanac.mappings["humidity-to-location"],
             vec![
@@ -205,7 +214,7 @@ mod tests {
     fn test_find_lowest_seed_from_input() {
         assert_eq!(
             find_lowest_seed_from_input(&fs::read_to_string("example.txt").unwrap()),
-            35
+            46
         );
     }
 
