@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs};
 
+use gcd::Gcd;
 use regex::Regex;
 
 #[derive(Default, PartialEq, Debug)]
@@ -55,7 +56,7 @@ impl Map {
     }
 
     fn parse_direction_line(line: &str) -> Option<(&str, &str, &str)> {
-        let re = Regex::new(r"(?<from>[A-Z]{3}) = \((?<left>[A-Z]{3}), (?<right>[A-Z]{3})\)")
+        let re = Regex::new(r"(?<from>.{3}) = \((?<left>.{3}), (?<right>.{3})\)")
             .expect("Invalid regex!");
         let caps = re.captures(line)?;
         Some((
@@ -90,23 +91,111 @@ impl Puzzle {
     }
 
     fn count_steps(&self, from: &str, to: &str) -> usize {
+        self.count_simultanious_steps(&[from], &[to]).unwrap()
+    }
+
+    fn count_simultanious_steps(&self, froms: &[&str], tos: &[&str]) -> Option<usize> {
+        if froms.len() != tos.len() || froms.len() == 0 {
+            return None;
+        };
+        self.count_simultanious_steps_until(froms, |currents| currents == tos)
+            .map(|(steps, _ends)| steps)
+    }
+
+    fn count_simultanious_steps_until<'a>(
+        &'a self,
+        froms: &[&'a str],
+        mut check_fn: impl FnMut(&[&str]) -> bool,
+    ) -> Option<(usize, Vec<&'a str>)> {
+        if froms.len() == 0 {
+            return None;
+        };
+
+        let mut currents: Vec<&str> = froms.into();
         let mut steps = 0;
-        let mut current = from;
         loop {
-            if current == to {
-                return steps;
+            if check_fn(&currents) {
+                return Some((steps, currents));
             }
-            current = self
-                .map
-                .step(current, self.directions[steps % self.directions.len()]);
+            currents.iter_mut().for_each(|val| {
+                *val = self
+                    .map
+                    .step(val, self.directions[steps % self.directions.len()])
+            });
             steps += 1;
+            if steps % 1000000 == 0 {
+                println!("{}", steps);
+            }
         }
     }
 }
 
+fn get_puzzle_loops(puzzle: &Puzzle, starts: &[&str]) -> Result<Vec<usize>, String> {
+    let mut res = vec![];
+    for start in starts {
+        let (steps, z_val) = puzzle
+            .count_simultanious_steps_until(&[start], |s| s.iter().all(|l| l.ends_with('Z')))
+            .unwrap();
+        let z_val = z_val[0];
+        let mut first = true;
+
+        let (next_steps, next_z_val) = puzzle
+            .count_simultanious_steps_until(&[z_val], |l| {
+                if first {
+                    first = false;
+                    return false;
+                }
+                l.iter().any(|n| n.ends_with('Z'))
+            })
+            .unwrap();
+
+        let next_z_val = next_z_val[0];
+
+        if next_z_val != z_val {
+            return Err(format!(
+                "More than 1 Z on track! Found {} then {}",
+                z_val, next_z_val
+            ));
+        }
+        if next_steps != steps {
+            return Err(format!(
+                "Loop doesn't contain the same steps! First Z after {} and 2nd after {}",
+                steps, next_steps
+            ));
+        }
+        if steps % puzzle.directions.len() != 0 {
+            return Err(format!("Loop doesn't conform with direction count and so isn't easily computable. Not supported!"));
+        }
+        res.push(steps)
+    }
+
+    Ok(res)
+}
+
+fn get_lowest_product(vals: &[usize]) -> u64 {
+    let gcd = vals
+        .iter()
+        .copied()
+        .reduce(|a, b| a.gcd(b))
+        .map(|v| v as u64)
+        .expect("No numbers supplied!");
+    vals.iter().map(|&v| v as u64 / gcd).product::<u64>() * gcd
+}
+
 fn main() {
     let puzzle = Puzzle::from_str(&fs::read_to_string("input.txt").unwrap()).unwrap();
-    println!("{}", puzzle.count_steps("AAA", "ZZZ"));
+
+    let starts: Vec<_> = puzzle
+        .map
+        .directions
+        .keys()
+        .filter(|&d| d.ends_with('A'))
+        .map(|v| v.as_str())
+        .collect();
+
+    let loops = get_puzzle_loops(&puzzle, &starts).unwrap();
+
+    println!("{}", get_lowest_product(&loops));
 }
 
 #[cfg(test)]
@@ -176,8 +265,29 @@ mod tests {
     #[test]
     fn test_solve_puzzle() {
         let puzzle =
-            Puzzle::from_str(&fs::read_to_string("example.txt").expect("Bad file example.txt"))
-                .expect("Bad Puzzle");
+            Puzzle::from_str(&fs::read_to_string("example.txt").unwrap()).expect("Bad Puzzle");
         assert_eq!(puzzle.count_steps("AAA", "ZZZ"), 6)
+    }
+
+    #[test]
+    fn test_solve_simultanious() {
+        let puzzle = Puzzle::from_str(&fs::read_to_string("simultanious_example.txt").unwrap())
+            .expect("Bad Puzzle");
+        assert_eq!(
+            puzzle.count_simultanious_steps(&["11A", "22A"], &["11Z", "22Z"]),
+            Some(6)
+        )
+    }
+
+    #[test]
+    fn test_step_until_zs() {
+        let puzzle = Puzzle::from_str(&fs::read_to_string("simultanious_example.txt").unwrap())
+            .expect("Bad Puzzle");
+        assert_eq!(
+            puzzle.count_simultanious_steps_until(&["11A", "22A"], |currents| currents
+                .iter()
+                .all(|l| l.ends_with('Z'))),
+            Some((6, vec!["11Z", "22Z"]))
+        )
     }
 }
