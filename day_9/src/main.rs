@@ -25,20 +25,39 @@ fn extrapolate_history(vals: &[i32]) -> i32 {
         .sum()
 }
 
-fn find_extrapolation_sum(s: &str) -> i32 {
+fn extrapolate_history_backwards(vals: &[i32]) -> i32 {
+    let diff_pyramid = compute_diff_pyramid(vals);
+    diff_pyramid
+        .iter()
+        .rev()
+        .map(|v| v.first().expect("All histories should be non-zero!"))
+        .fold(0, |acc, el| el - acc)
+}
+
+fn parse_input(s: &str) -> Vec<Vec<i32>> {
     s.lines()
         .map(|l| {
             l.split_whitespace()
                 .map(|v| v.parse().unwrap())
                 .collect::<Vec<_>>()
         })
-        .map(|v| extrapolate_history(&v))
+        .collect()
+}
+
+fn find_extrapolation_sum(s: &str) -> i32 {
+    parse_input(s).iter().map(|v| extrapolate_history(&v)).sum()
+}
+
+fn find_extrapolation_sum_backwards(s: &str) -> i32 {
+    parse_input(s)
+        .iter()
+        .map(|v| extrapolate_history_backwards(&v))
         .sum()
 }
 
 fn main() {
     let input = fs::read_to_string("input.txt").unwrap();
-    println!("{}", find_extrapolation_sum(&input));
+    println!("{}", find_extrapolation_sum_backwards(&input));
 }
 
 #[cfg(test)]
@@ -71,5 +90,11 @@ mod tests {
             find_extrapolation_sum(&fs::read_to_string("example.txt").unwrap()),
             114
         )
+    }
+
+    #[test]
+    fn test_extrapolate_history_backwards() {
+        assert_eq!(extrapolate_history_backwards(&[1, 4, 7]), -2);
+        assert_eq!(extrapolate_history_backwards(&[10, 13, 16, 21, 30, 45]), 5);
     }
 }
